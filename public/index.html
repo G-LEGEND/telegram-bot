@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Chat with harvestive customer representative</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      background: #f2f2f2;
+    }
+    .chat-container {
+      width: 50vw;
+      height: 70vh;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .chat-header {
+      background: #4CAF50;
+      color: white;
+      padding: 12px;
+      text-align: center;
+      font-size: 18px;
+      font-weight: bold;
+    }
+    .chat-user-banner {
+      background: #e8f5e9;
+      color: #333;
+      padding: 8px;
+      text-align: center;
+      font-size: 14px;
+      border-bottom: 1px solid #ddd;
+      font-style: italic;
+    }
+    #chat {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      background: #f9f9f9;
+      display: flex;
+      flex-direction: column;
+    }
+    .msg {
+      max-width: 80%;
+      padding: 10px 14px;
+      border-radius: 12px;
+      margin: 6px 0;
+      font-size: 15px;
+      line-height: 1.4;
+      word-wrap: break-word;
+      position: relative;
+    }
+    .msg .sender {
+      font-weight: bold;
+      margin-bottom: 4px;
+      display: block;
+    }
+    .msg .time {
+      font-size: 11px;
+      color: #666;
+      display: inline-block;
+      margin-left: 6px;
+    }
+    .msg .status {
+      font-size: 12px;
+      margin-left: 4px;
+    }
+    .msg.user {
+      background: #e0f7fa;
+      align-self: flex-start;
+      border-top-left-radius: 0;
+    }
+    .msg.admin {
+      background: #d1ffd6;
+      align-self: flex-end;
+      border-top-right-radius: 0;
+    }
+    .chat-footer {
+      display: flex;
+      border-top: 1px solid #ddd;
+    }
+    #msg {
+      flex: 1;
+      border: none;
+      padding: 12px;
+      font-size: 15px;
+      outline: none;
+    }
+    button {
+      background: #4CAF50;
+      border: none;
+      color: white;
+      padding: 0 20px;
+      cursor: pointer;
+      font-size: 15px;
+    }
+    button:hover {
+      background: #45a049;
+    }
+
+    /* ✅ Floating loader (only spinner + text, no background) */
+    .loading-screen {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      z-index: 1000;
+      font-size: 14px;
+      font-weight: bold;
+      color: #333;
+    }
+    .spinner {
+      border: 3px solid rgba(0,0,0,0.1);
+      border-top: 3px solid #4CAF50;
+      border-radius: 50%;
+      width: 28px;
+      height: 28px;
+      animation: spin 1s linear infinite;
+      margin-bottom: 8px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* 📱 Mobile responsive */
+    @media (max-width: 768px) {
+      .chat-container {
+        width: 95vw;
+        height: 85vh;
+      }
+      .msg {
+        font-size: 14px;
+      }
+      .chat-header {
+        font-size: 16px;
+        padding: 10px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- ✅ Floating loader -->
+  <div class="loading-screen" id="loadingScreen">
+    <div class="spinner"></div>
+    Please wait a sec...
+  </div>
+
+  <div class="chat-container">
+    <div class="chat-header">harvestive customer representative</div>
+    <div class="chat-user-banner" id="userBanner"></div>
+    <div id="chat"></div>
+    <div class="chat-footer">
+      <input id="msg" placeholder="Type message..." autocomplete="off">
+      <button onclick="sendMsg()">Send</button>
+    </div>
+  </div>
+
+  <!-- ✅ Socket.IO client from Render -->
+  <script src="https://your-backend.onrender.com/socket.io/socket.io.js"></script>
+  <script>
+    let socket, userName, userId;
+
+    // Load saved name & ID
+    userName = localStorage.getItem("chatName");
+    userId = localStorage.getItem("chatUserId");
+
+    if (!userName) {
+      userName = prompt("Enter your name:");
+      localStorage.setItem("chatName", userName);
+    }
+    if (!userId) {
+      userId = Math.random().toString(36).substr(2, 9);
+      localStorage.setItem("chatUserId", userId);
+    }
+
+    // Show banner with username
+    document.getElementById("userBanner").innerText = `You are chatting as: ${userName}`;
+
+    // Connect to socket.io server hosted on Render
+    socket = io("https://your-backend.onrender.com", { 
+      query: { name: userName, userId: userId } 
+    });
+
+    // Hide loader when connected
+    socket.on("connect", () => {
+      document.getElementById("loadingScreen").style.display = "none";
+    });
+
+    // Show loader if disconnected
+    socket.on("disconnect", () => {
+      document.getElementById("loadingScreen").style.display = "flex";
+    });
+
+    // Receive messages
+    socket.on("chat", data => {
+      let from = data.from;
+      if (from === "Admin" || from === "Harvestive Manager") {
+        from = "customer representative";
+      }
+      addMessage(from, data.text, data.time);
+    });
+
+    // Status updates
+    socket.on("status", data => {
+      updateLastMessageStatus(data.text, data.status);
+    });
+
+    function addMessage(from, text, time, status = null) {
+      const chat = document.getElementById("chat");
+      const div = document.createElement("div");
+
+      div.classList.add("msg");
+      div.classList.add(from === "customer representative" ? "admin" : "user");
+
+      const t = new Date(time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+      let statusHTML = "";
+
+      if (from === userName) {
+        statusHTML = `<span class="status" id="status-${Date.now()}">✔</span>`;
+      }
+
+      div.innerHTML = `<span class="sender">${from}</span>${text}<br>
+                       <span class="time">${t}</span>${statusHTML}`;
+
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function updateLastMessageStatus(text, status) {
+      const chat = document.getElementById("chat");
+      const msgs = chat.querySelectorAll(".msg.user .status");
+      if (msgs.length === 0) return;
+      const lastStatus = msgs[msgs.length - 1];
+
+      if (status === "sent") lastStatus.innerText = "✔";
+      if (status === "delivered") lastStatus.innerText = "✔✔";
+      if (status === "seen") {
+        lastStatus.innerText = "✔✔";
+        lastStatus.style.color = "blue";
+      }
+    }
+
+    function sendMsg() {
+      const input = document.getElementById("msg");
+      const text = input.value.trim();
+      if (!text) return;
+      socket.emit("message", { text });
+      addMessage(userName, text, new Date(), "sent");
+      input.value = "";
+    }
+  </script>
+</body>
+</html>
