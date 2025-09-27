@@ -6,12 +6,17 @@ const mongoose = require('mongoose');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+  cors: {
+    origin: "*", // ✅ Allow all (or replace with your Netlify domain for security)
+    methods: ["GET", "POST"]
+  }
+});
 
 // 🔹 Replace with your real values
-const TELEGRAM_TOKEN = "8022309571:AAFAw_cks1nmFXGuHjo2ZSFu32QOby5JN8M";
-const ADMIN_CHAT_ID = "5561210406";
-const MONGO_URI = "mongodb+srv://telegrambot_chat:telegrambot_pass001@cluster0.uwy4rjd.mongodb.net/chatdb?retryWrites=true&w=majority&appName=Cluster0";
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
+const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID;
+const MONGO_URI = process.env.MONGO_URI;
 
 // Connect MongoDB
 mongoose.connect(MONGO_URI, {})
@@ -92,8 +97,6 @@ io.on('connection', socket => {
         time: new Date()
       });
     }).catch(err => console.error("Telegram Error:", err));
-
-    // ❌ Removed duplicate echo here
   });
 
   socket.on('disconnect', () => {
@@ -159,9 +162,8 @@ bot.on("message", async msg => {
   }
 });
 
-// Serve frontend
-app.use(express.static(__dirname + '/public'));
+// ❌ Removed app.use(express.static(...)) so backend doesn’t serve frontend
 
 server.listen(3000, () =>
-  console.log("🚀 Server running at http://localhost:3000")
+  console.log("🚀 Backend running at http://localhost:3000")
 );
